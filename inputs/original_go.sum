@@ -1,0 +1,9 @@
+gonum.org/v1/gonum v0.16.0 h1:JKbmSgVMFkFMDpGCixMRJCMEMmNhrsJuJqVDPMGPnQY=
+gonum.org/v1/gonum v0.16.0/go.mod h1:fef3am4MQ93R2HHpKnLk4/Tbh/s0+wqD5nfa6Pnwy4E=
+golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
+golang.org/x/text v0.3.7 h1:olpwvP2KacW1ZWvsR7uQhoyTYvKAupfQrRGBFM352Gk=
+golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
+rsc.io/quote v1.4.0 h1:tYuJspOzwTRMUOX6qmSDRTEKFVV80GM0/l89OLZuVNg=
+rsc.io/quote v1.4.0/go.mod h1:S2vMDfxMfk+OGQ7xf1uNqJCSuSPCW5QC127LHYfOJmQ=
+rsc.io/sampler v1.0.0 h1:CZX0Ury6np11Lwls9Jja2rFf3YrNPeUPAWiEVrJ0u/4=
+rsc.io/sampler v1.0.0/go.mod h1:cqxpM3ZVz9VtirqxZPmrWzkQ+UkiNiGtkrN+B+i8kx8=
