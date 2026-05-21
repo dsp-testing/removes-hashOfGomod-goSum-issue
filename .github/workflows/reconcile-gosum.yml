@@ -1,0 +1,136 @@
+name: Update Go Dependencies and Reconcile Checksums
+
+on:
+  push:
+    paths:
+      - 'go_project/go.mod'
+    branches:
+      - main
+      - 'chp/**'
+  workflow_dispatch:
+    inputs:
+      dependency:
+        description: 'Dependency to update (e.g., rsc.io/quote)'
+        required: true
+      version:
+        description: 'Target version (e.g., v1.5.2)'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-and-reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need previous commit to diff go.mod
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Detect updated dependencies from go.mod changes
+        id: detect-deps
+        run: |
+          cd go_project
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "deps=${{ github.event.inputs.dependency }}" >> "$GITHUB_OUTPUT"
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "Manually triggered: updating ${{ github.event.inputs.dependency }} to ${{ github.event.inputs.version }}"
+          else
+            # Detect which dependencies changed in go.mod
+            CHANGED_DEPS=$(git diff HEAD~1 HEAD -- go.mod \
+              | grep '^+' | grep -v '^+++' \
+              | grep -oP '\t\S+' | sed 's/\t//' \
+              | sort -u | tr '\n' ' ')
+            echo "deps=${CHANGED_DEPS}" >> "$GITHUB_OUTPUT"
+            echo "Detected changed dependencies: ${CHANGED_DEPS}"
+          fi
+
+      - name: Save original go.sum
+        run: cp go_project/go.sum go_project/go.sum.original
+
+      - name: Run go mod tidy to update checksums
+        run: |
+          cd go_project
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            go get "${{ github.event.inputs.dependency }}@${{ github.event.inputs.version }}"
+          fi
+
+          go mod tidy
+        env:
+          GONOSUMCHECK: ""
+          GOFLAGS: ""
+
+      - name: Reconcile go.sum (preserve unrelated checksums)
+        run: |
+          # Restore original for the reconcile script to compare against
+          cp go_project/go.sum go_project/go.sum.updated
+          cp go_project/go.sum.original go_project/go.sum.bak
+
+          # Run reconciliation
+          DEPS="${{ steps.detect-deps.outputs.deps }}"
+          ruby reconcile_and_update.rb go_project ${DEPS}
+
+          # Clean up temp files
+          rm -f go_project/go.sum.original go_project/go.sum.updated go_project/go.sum.bak
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet go_project/go.sum; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No changes to go.sum after reconciliation"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected in go.sum:"
+            git diff --stat go_project/go.sum
+          fi
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            fix: reconcile go.sum checksums after dependency update
+
+            Preserves unrelated /go.mod checksum lines that go tooling
+            incorrectly prunes during dependency updates.
+
+            Updated deps: ${{ steps.detect-deps.outputs.deps }}
+
+            Fixes: dependabot/dependabot-core#14872
+          branch: fix/reconcile-go-sum-${{ github.sha }}
+          title: "fix: Reconcile go.sum checksums after dependency update"
+          body: |
+            ## Summary
+
+            This PR was automatically generated after detecting a go.mod dependency update.
+
+            The `reconcile_go_sum` fix was applied to preserve unrelated `/go.mod` checksum
+            lines that Go tooling (`go get` / `go mod tidy`) incorrectly prunes.
+
+            ### What was updated
+            - Dependencies: `${{ steps.detect-deps.outputs.deps }}`
+
+            ### Why this PR exists
+            Go tooling sometimes removes `/go.mod` checksum lines for modules that are
+            still in the dependency graph. This causes `go mod tidy` to fail in CI
+            (see [dependabot/dependabot-core#14872](https://github.com/dependabot/dependabot-core/issues/14872)).
+
+            ### Verification
+            Run `go mod tidy` — it should produce no changes if this reconciliation is correct.
+          labels: |
+            dependencies
+            automated
+          delete-branch: true

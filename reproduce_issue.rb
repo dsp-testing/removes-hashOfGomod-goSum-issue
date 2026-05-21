@@ -153,9 +153,8 @@ def reconcile_go_sum(original_go_sum, updated_go_sum, updated_dependency_names)
       next unless versions&.include?(version)
     else
       # go.mod-only entry — restore if module is still referenced at all
-      next unless updated_modules.key?(module_path)
+      next unless updated_modules.fetch(module_path, nil)&.include?(version)
     end
-
     line
   end
 

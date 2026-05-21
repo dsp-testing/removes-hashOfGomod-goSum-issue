@@ -6,20 +6,68 @@ When Dependabot updates a Go dependency, the Go tooling (`go get`, `go mod tidy`
 prune `/go.mod` checksum entries from `go.sum` for **unrelated** modules. This causes
 Dependabot PRs to unexpectedly remove hash entries that `go mod tidy` would normally keep.
 
-## How to reproduce
+## Repository Structure
 
-Run the demonstration script:
+```
+├── reproduce_issue.rb        # Demonstrates the bug and fix
+├── test_scenarios.rb         # 12 scenario tests for reconcile_go_sum
+├── reconcile_and_update.rb   # Standalone reconcile script (used in CI)
+├── go_project/
+│   ├── go.mod                # Sample Go module file
+│   └── go.sum                # Sample checksums file
+├── .github/
+│   └── workflows/
+│       ├── ci.yml            # Runs reproduction + test scenarios
+│       └── reconcile-gosum.yml  # Auto-reconciles and opens PR on go.mod change
+```
+
+## How to reproduce the bug
 
 ```bash
 ruby reproduce_issue.rb
 ```
 
-## What the script shows
+## Run test scenarios
 
-1. **INPUT**: The original `go.sum` with checksums for all modules
-2. **PROCESS**: Go tooling updates the target dependency and prunes an unrelated `/go.mod` line
-3. **OUTPUT (without fix)**: The unrelated checksum is lost — this is the bug
-4. **OUTPUT (with fix)**: The `reconcile_go_sum` method restores the improperly removed line
+```bash
+ruby test_scenarios.rb
+```
+
+This runs 12 scenarios verifying the reconcile logic handles:
+- Correct restoration of pruned `/go.mod` lines
+- No false restoration for removed/upgraded/downgraded modules
+- Multiple dependencies updated simultaneously
+- go.mod-only entries (no zip hash)
+
+## Automated Workflow: Reconcile & PR
+
+The workflow (`.github/workflows/reconcile-gosum.yml`) triggers when `go_project/go.mod`
+is modified. It:
+
+1. **Detects** which dependencies were updated in `go.mod`
+2. **Runs** `go mod tidy` to update `go.sum` via Go tooling
+3. **Reconciles** `go.sum` using `reconcile_and_update.rb` — restores `/go.mod` checksum
+   lines that Go tooling incorrectly pruned for unrelated modules
+4. **Opens a PR** with the corrected `go.sum` if changes were needed
+
+### Manual trigger
+
+You can also trigger the workflow manually via `workflow_dispatch`:
+
+```bash
+gh workflow run reconcile-gosum.yml \
+  -f dependency="rsc.io/quote" \
+  -f version="v1.5.2"
+```
+
+## How the fix works
+
+The `reconcile_go_sum` function compares the original `go.sum` with what Go tooling
+produced and restores `/go.mod` checksum lines that were pruned, but only when:
+
+1. The line is a `/go.mod` checksum (not a zip hash)
+2. The module is **not** the dependency being updated
+3. The module+version is still present in the dependency graph
 
 ## References
 

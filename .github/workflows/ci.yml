@@ -17,3 +17,5 @@ jobs:
 
       - run: bundle install
       - run: bundle exec rake
+      - name: Run reconcile test scenarios
+        run: ruby test_scenarios.rb
