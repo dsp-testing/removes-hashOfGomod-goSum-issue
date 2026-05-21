@@ -51,7 +51,7 @@ def reconcile_go_sum(original_go_sum, updated_go_sum, updated_dependency_names)
       versions = updated_modules.fetch(module_path, nil)
       next unless versions&.include?(version)
     else
-      next unless updated_modules.key?(module_path)
+      next unless updated_modules.fetch(module_path, nil)&.include?(version)
     end
 
     line
@@ -568,7 +568,7 @@ if $fail_count > 0
   puts "  match logic catches it."
   puts
   puts "SUGGESTED FIX for the go.mod-only branch:"
-  puts "  Change: next unless updated_modules.key?(module_path)"
+  puts "  Change: next unless updated_modules.fetch(module_path, nil)&.include?(version)"
   puts "  To:     next unless updated_modules.fetch(module_path, nil)&.include?(version)"
   puts "  This ensures the specific version is still in the graph, not just any version."
 end
